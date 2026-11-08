@@ -1,1 +1,29 @@
 
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.kadri.apkbuilder'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.kadri.apkbuilder'
+        minSdk 23
+        targetSdk 35
+
+        versionCode 1
+        versionName '1.0'
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix '.debug'
+        }
+
+        release {
+            minifyEnabled false
+        }
+    }
+}
+
