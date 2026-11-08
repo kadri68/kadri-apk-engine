@@ -1,19 +1,40 @@
 
+import groovy.json.JsonSlurper
+
 plugins {
     id 'com.android.application'
 }
+
+def configFile = rootProject.file("build-config.json")
+def appConfig = [:]
+
+if (configFile.exists()) {
+    appConfig = new JsonSlurper().parse(configFile)
+}
+
+def appId = appConfig.packageId ?: "com.kadri.apkbuilder"
+def appLabel = appConfig.appName ?: "Kadri APK Builder"
+def appVersionName = appConfig.versionName ?: "1.0"
+def appVersionCode = (appConfig.versionCode ?: 1) as Integer
+def appOrientation = appConfig.orientation ?: "unspecified"
 
 android {
     namespace 'com.kadri.apkbuilder'
     compileSdk 35
 
     defaultConfig {
-        applicationId 'com.kadri.apkbuilder'
+        applicationId appId
+
         minSdk 23
         targetSdk 35
 
-        versionCode 1
-        versionName '1.0'
+        versionCode appVersionCode
+        versionName appVersionName
+
+        manifestPlaceholders = [
+            appLabel: appLabel,
+            appOrientation: appOrientation
+        ]
     }
 
     buildTypes {
@@ -26,4 +47,3 @@ android {
         }
     }
 }
-
