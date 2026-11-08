@@ -8,6 +8,10 @@ on:
         description: "HTML file encoded in Base64"
         required: false
         type: string
+      config_base64:
+        description: "App configuration encoded in Base64"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -41,36 +45,79 @@ jobs:
         run: |
           sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Validate Android Manifest
-        run: |
-          python3 -c "import xml.etree.ElementTree as ET; ET.parse('app/src/main/AndroidManifest.xml'); print('Manifest XML is valid')"
-
-      - name: Prepare HTML project
+      - name: Prepare HTML and app configuration
         env:
           HTML_BASE64: ${{ inputs.html_base64 }}
+          CONFIG_BASE64: ${{ inputs.config_base64 }}
         run: |
-          mkdir -p app/src/main/assets/www
-
-          if [ -n "$HTML_BASE64" ]; then
-            python3 - <<'PY'
+          python3 - <<'PY'
           import os
           import base64
+          import json
+          import xml.etree.ElementTree as ET
 
-          raw = os.environ["HTML_BASE64"]
-          html = base64.b64decode(raw, validate=True)
+          raw_html = os.environ.get("HTML_BASE64", "")
+          raw_config = os.environ.get("CONFIG_BASE64", "")
+
+          if raw_html:
+              html = base64.b64decode(raw_html, validate=True)
+          else:
+              with open("input/index.html", "rb") as f:
+                  html = f.read()
 
           if len(html) > 40000:
               raise SystemExit("HTML file exceeds 40 KB")
 
+          os.makedirs("app/src/main/assets/www", exist_ok=True)
+
           with open("app/src/main/assets/www/index.html", "wb") as f:
               f.write(html)
 
-          print("Uploaded HTML prepared successfully")
+          config = {}
+
+          if raw_config:
+              config_bytes = base64.b64decode(raw_config, validate=True)
+              config = json.loads(config_bytes.decode("utf-8"))
+
+          with open("build-config.json", "w", encoding="utf-8") as f:
+              json.dump(config, f, ensure_ascii=False, indent=2)
+
+          manifest_path = "app/src/main/AndroidManifest.xml"
+          tree = ET.parse(manifest_path)
+          root = tree.getroot()
+
+          android_ns = "{http://schemas.android.com/apk/res/android}"
+
+          allow_internet = config.get("internet", True)
+
+          if not allow_internet:
+              for item in list(root):
+                  if (
+                      item.tag == "uses-permission"
+                      and item.get(android_ns + "name")
+                      == "android.permission.INTERNET"
+                  ):
+                      root.remove(item)
+
+          ET.register_namespace(
+              "android",
+              "http://schemas.android.com/apk/res/android"
+          )
+
+          tree.write(
+              manifest_path,
+              encoding="utf-8",
+              xml_declaration=True
+          )
+
+          print("HTML prepared successfully")
+          print("App configuration prepared successfully")
+          print("Internet permission:", allow_internet)
           PY
-          else
-            cp input/index.html app/src/main/assets/www/index.html
-            echo "Using test HTML file"
-          fi
+
+      - name: Validate Android Manifest
+        run: |
+          python3 -c "import xml.etree.ElementTree as ET; ET.parse('app/src/main/AndroidManifest.xml'); print('Manifest XML is valid')"
 
       - name: Build APK
         run: gradle assembleDebug
