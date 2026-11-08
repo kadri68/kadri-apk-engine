@@ -3,6 +3,11 @@ name: Kadri APK Builder
 
 on:
   workflow_dispatch:
+    inputs:
+      html_base64:
+        description: "HTML file encoded in Base64"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -41,10 +46,32 @@ jobs:
           python3 -c "import xml.etree.ElementTree as ET; ET.parse('app/src/main/AndroidManifest.xml'); print('Manifest XML is valid')"
 
       - name: Prepare HTML project
+        env:
+          HTML_BASE64: ${{ inputs.html_base64 }}
         run: |
           mkdir -p app/src/main/assets/www
-          cp input/index.html app/src/main/assets/www/index.html
-          
+
+          if [ -n "$HTML_BASE64" ]; then
+            python3 - <<'PY'
+          import os
+          import base64
+
+          raw = os.environ["HTML_BASE64"]
+          html = base64.b64decode(raw, validate=True)
+
+          if len(html) > 40000:
+              raise SystemExit("HTML file exceeds 40 KB")
+
+          with open("app/src/main/assets/www/index.html", "wb") as f:
+              f.write(html)
+
+          print("Uploaded HTML prepared successfully")
+          PY
+          else
+            cp input/index.html app/src/main/assets/www/index.html
+            echo "Using test HTML file"
+          fi
+
       - name: Build APK
         run: gradle assembleDebug
 
